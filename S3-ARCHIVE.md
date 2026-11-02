@@ -62,3 +62,12 @@ series name as their title, and that provider would otherwise overwrite the epis
 
 Builds both web UIs and the server from source, then runs them on the official `gotson/komga`
 image's runtime.
+
+## Homelab deploy
+
+The homelab runs this fork as the slot `komga` (`flake.nix`, `#default`): the server from a pinned
+image on a Nix JRE. Pushes and pull requests get a `homelab/build` status from the homelab's Forgejo
+(the primary remote; GitHub is its mirror, so push to Forgejo only). Every merge to `s3-archive`
+deploys; a failed health check rolls back. To ship a change: merge it, wait for the
+`s3-archive image` workflow, then update `imageDigest`, `hash` and `finalImageTag` in `flake.nix`
+(the command is in its header) and merge that.
