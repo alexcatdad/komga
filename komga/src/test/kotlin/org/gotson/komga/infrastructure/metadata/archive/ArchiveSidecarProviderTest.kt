@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import org.assertj.core.api.Assertions.assertThat
 import org.gotson.komga.domain.model.BookWithMedia
 import org.gotson.komga.domain.model.Media
+import org.gotson.komga.domain.model.SeriesMetadata
 import org.gotson.komga.domain.model.makeBook
 import org.gotson.komga.domain.model.makeSeries
 import org.junit.jupiter.api.Test
@@ -100,6 +101,7 @@ class ArchiveSidecarProviderTest {
     assertThat(patch.titleSort).isEqualTo("My Series")
     assertThat(patch.summary).isEqualTo("About it")
     assertThat(patch.publisher).isEqualTo("Tapas")
+    assertThat(patch.readingDirection).isEqualTo(SeriesMetadata.ReadingDirection.WEBTOON)
   }
 
   @Test

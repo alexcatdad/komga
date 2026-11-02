@@ -9,6 +9,7 @@ import org.gotson.komga.domain.model.BookWithMedia
 import org.gotson.komga.domain.model.Library
 import org.gotson.komga.domain.model.MetadataPatchTarget
 import org.gotson.komga.domain.model.Series
+import org.gotson.komga.domain.model.SeriesMetadata
 import org.gotson.komga.domain.model.SeriesMetadataPatch
 import org.gotson.komga.domain.model.WebLink
 import org.gotson.komga.infrastructure.metadata.BookMetadataProvider
@@ -29,7 +30,8 @@ private val logger = KotlinLogging.logger {}
 /**
  * Reads the JSON metadata that a content-addressed web-comic archive writes next to its files:
  * - book: an episode document (`id`, `title`, `position`, optional `url`, `source`) in the book's folder
- * - series: a series document (`title`, optional `description`, `url`, `source`) in the series' `metadata/` folder
+ * - series: a series document (`title`, optional `description`, `url`, `source`) in the series' `metadata/` folder;
+ *   the series is read as a webtoon (vertical scroll)
  *
  * Files are hash-named, so documents are recognised by their fields, and the newest one wins when there are several.
  * Other JSON in the same folders (such as a novel's captured original, which has a `kind`) is ignored.
@@ -68,7 +70,8 @@ class ArchiveSidecarProvider(
       titleSort = title,
       status = null,
       summary = document["description"]?.takeIf { it.isTextual }?.asText(),
-      readingDirection = null,
+      // web comics are vertical strips; novels are opened by the EPUB reader, which ignores this
+      readingDirection = SeriesMetadata.ReadingDirection.WEBTOON,
       publisher = document["source"]?.takeIf { it.isTextual }?.asText(),
       ageRating = null,
       language = null,

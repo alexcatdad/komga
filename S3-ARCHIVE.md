@@ -51,7 +51,7 @@ by their fields since the files are hash-named:
 - book: the episode document in the book's folder (`id`, `title`, `position`, `url`, `source`) gives
   the title, number, sort number and a link;
 - series: the newest document in the series' `metadata/` folder (`title`, `description`, `source`)
-  gives the title, summary and publisher.
+  gives the title, summary and publisher, and sets the reading direction to webtoon (vertical scroll).
 
 Turn off **import EPUB book metadata** for archive libraries: the archive's EPUBs carry only the
 series name as their title, and that provider would otherwise overwrite the episode title.
