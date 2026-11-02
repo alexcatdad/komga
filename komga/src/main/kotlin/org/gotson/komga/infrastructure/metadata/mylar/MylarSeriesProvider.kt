@@ -12,7 +12,8 @@ import org.gotson.komga.infrastructure.metadata.SeriesMetadataProvider
 import org.gotson.komga.infrastructure.metadata.mylar.dto.Status
 import org.gotson.komga.infrastructure.sidecar.SidecarSeriesConsumer
 import org.springframework.stereotype.Service
-import kotlin.io.path.notExists
+import kotlin.io.path.inputStream
+import kotlin.io.path.isRegularFile
 import org.gotson.komga.infrastructure.metadata.mylar.dto.Series as MylarSeries
 
 private val logger = KotlinLogging.logger {}
@@ -32,11 +33,11 @@ class MylarSeriesProvider(
 
     try {
       val seriesJsonPath = series.path.resolve(SERIES_JSON)
-      if (seriesJsonPath.notExists()) {
+      if (!seriesJsonPath.isRegularFile()) {
         logger.debug { "Series folder does not contain any $SERIES_JSON file: $series" }
         return null
       }
-      val metadata = mapper.readValue(seriesJsonPath.toFile(), MylarSeries::class.java).metadata
+      val metadata = seriesJsonPath.inputStream().use { mapper.readValue(it, MylarSeries::class.java) }.metadata
 
       val title =
         if (metadata.volume == null || metadata.volume == 1)

@@ -82,6 +82,8 @@ class LibraryContentLifecycle(
             library.scanPdf,
             library.scanEpub,
             library.scanDirectoryExclusions,
+            library.scanSeriesDepth,
+            library.scanOneBookPerFolder,
           )
         } catch (e: DirectoryNotFoundException) {
           library.copy(unavailableDate = LocalDateTime.now()).let {

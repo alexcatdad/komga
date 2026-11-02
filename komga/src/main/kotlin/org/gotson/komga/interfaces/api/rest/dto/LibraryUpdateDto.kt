@@ -1,5 +1,6 @@
 package org.gotson.komga.interfaces.api.rest.dto
 
+import jakarta.validation.constraints.Positive
 import org.gotson.komga.infrastructure.validation.NullOrNotBlank
 import kotlin.properties.Delegates
 
@@ -48,4 +49,11 @@ class LibraryUpdateDto {
     by Delegates.observable(null) { prop, _, _ ->
       isSet[prop.name] = true
     }
+
+  @get:Positive
+  var scanSeriesDepth: Int?
+    by Delegates.observable(null) { prop, _, _ ->
+      isSet[prop.name] = true
+    }
+  val scanOneBookPerFolder: Boolean? = null
 }

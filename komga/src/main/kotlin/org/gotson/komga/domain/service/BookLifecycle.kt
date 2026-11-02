@@ -40,8 +40,8 @@ import org.springframework.context.ApplicationEventPublisher
 import org.springframework.data.domain.Pageable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.support.TransactionTemplate
-import java.io.File
 import java.net.URLDecoder
+import java.nio.file.Paths
 import java.time.LocalDateTime
 import java.time.ZoneId
 import kotlin.io.path.deleteIfExists
@@ -49,6 +49,7 @@ import kotlin.io.path.exists
 import kotlin.io.path.isWritable
 import kotlin.io.path.listDirectoryEntries
 import kotlin.io.path.notExists
+import kotlin.io.path.readBytes
 import kotlin.io.path.toPath
 import kotlin.math.roundToInt
 
@@ -224,7 +225,7 @@ class BookLifecycle(
       val thumbnailBytes =
         when {
           it.thumbnail != null -> it.thumbnail
-          it.url != null -> File(it.url.toURI()).readBytes()
+          it.url != null -> Paths.get(it.url.toURI()).readBytes()
           else -> return null
         }
 
@@ -265,7 +266,7 @@ class BookLifecycle(
   private fun getBytesFromThumbnailBook(thumbnail: ThumbnailBook): ByteArray? =
     when {
       thumbnail.thumbnail != null -> thumbnail.thumbnail
-      thumbnail.url != null -> File(thumbnail.url.toURI()).readBytes()
+      thumbnail.url != null -> Paths.get(thumbnail.url.toURI()).readBytes()
       else -> null
     }
 

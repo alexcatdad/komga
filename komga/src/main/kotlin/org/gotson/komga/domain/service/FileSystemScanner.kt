@@ -53,6 +53,8 @@ class FileSystemScanner(
     scanPdf: Boolean = true,
     scanEpub: Boolean = true,
     directoryExclusions: Set<String> = emptySet(),
+    seriesDepth: Int? = null,
+    oneBookPerFolder: Boolean = false,
   ): ScanResult {
     val scanForExtensions =
       buildList {
@@ -64,6 +66,8 @@ class FileSystemScanner(
     logger.info { "Scan for extensions: $scanForExtensions" }
     logger.info { "Excluded directory patterns: $directoryExclusions" }
     logger.info { "Force directory modified time: $forceDirectoryModifiedTime" }
+    logger.info { "Series depth: ${seriesDepth ?: "folder of each book"}" }
+    logger.info { "One book per folder: $oneBookPerFolder" }
 
     if (!(Files.isDirectory(root) && Files.isReadable(root)))
       throw DirectoryNotFoundException("Folder is not accessible: $root", "ERR_1016")
@@ -79,6 +83,38 @@ class FileSystemScanner(
       val pathToBooks = mutableMapOf<Path, MutableList<Book>>()
       val pathToBookSidecars = mutableMapOf<Path, MutableList<TempSidecar>>()
 
+      fun isExcluded(path: Path) = directoryExclusions.any { exclude -> path.pathString.contains(exclude, true) }
+
+      // with a series depth, books deeper than that depth belong to their ancestor folder at that depth
+      fun seriesFolderOf(dir: Path): Path {
+        val depth = dir.nameCount - root.nameCount
+        if (seriesDepth == null || depth <= seriesDepth) return dir
+        var ancestor = dir
+        repeat(depth - seriesDepth) { ancestor = ancestor.parent }
+        return ancestor
+      }
+
+      // book sidecars are matched with the actual list of books of the folder they are in
+      fun matchBookSidecars(
+        dir: Path,
+        books: List<Book>,
+      ) {
+        books.forEach { book ->
+          val sidecars =
+            pathToBookSidecars[dir]
+              ?.mapNotNull { sidecar ->
+                sidecarBookConsumers.firstOrNull { it.isSidecarBookMatch(book.name, sidecar.name) }?.let {
+                  sidecar to it.getSidecarBookType()
+                }
+              }?.toMap() ?: emptyMap()
+          pathToBookSidecars[dir]?.minusAssign(sidecars.keys)
+
+          sidecars.mapTo(scannedSidecars) { (sidecar, type) ->
+            Sidecar(sidecar.url, book.url, sidecar.lastModifiedTime, type, Sidecar.Source.BOOK)
+          }
+        }
+      }
+
       Files.walkFileTree(
         root,
         setOf(FileVisitOption.FOLLOW_LINKS),
@@ -89,16 +125,13 @@ class FileSystemScanner(
             attrs: BasicFileAttributes,
           ): FileVisitResult {
             logger.trace { "preVisit: $dir (regularFile:${attrs.isRegularFile}, directory:${attrs.isDirectory}, symbolicLink:${attrs.isSymbolicLink}, other:${attrs.isOther})" }
-            if (dir.name.startsWith(".") ||
-              directoryExclusions.any { exclude ->
-                dir.pathString.contains(exclude, true)
-              }
-            )
+            if (dir.name.startsWith(".") || isExcluded(dir))
               return FileVisitResult.SKIP_SUBTREE
 
             pathToSeries[dir] =
               Series(
-                name = dir.name.ifBlank { dir.pathString },
+                // S3 folder names keep their trailing separator
+                name = dir.name.trimEnd('/').ifBlank { dir.pathString },
                 url = dir.toUri().toURL(),
                 fileLastModified = attrs.getUpdatedTime(),
               )
@@ -113,11 +146,17 @@ class FileSystemScanner(
             logger.trace { "visitFile: $file (regularFile:${attrs.isRegularFile}, directory:${attrs.isDirectory}, symbolicLink:${attrs.isSymbolicLink}, other:${attrs.isOther})" }
             if (!attrs.isSymbolicLink && !attrs.isDirectory) {
               if (scanForExtensions.contains(file.extension.lowercase()) &&
-                !file.name.startsWith(".")
+                !file.name.startsWith(".") &&
+                !isExcluded(file)
               ) {
                 val book = pathToBook(file, attrs)
                 file.parent.let { key ->
-                  pathToBooks.merge(key, mutableListOf(book)) { prev, one -> prev.union(one).toMutableList() }
+                  pathToBooks.merge(key, mutableListOf(book)) { prev, one ->
+                    if (oneBookPerFolder)
+                      mutableListOf((prev + one).maxBy { it.fileLastModified })
+                    else
+                      prev.union(one).toMutableList()
+                  }
                 }
               }
 
@@ -154,6 +193,16 @@ class FileSystemScanner(
           ): FileVisitResult {
             logger.trace { "postVisit: $dir" }
             val books = pathToBooks[dir]
+
+            val seriesFolder = seriesFolderOf(dir)
+            if (seriesFolder != dir) {
+              if (!books.isNullOrEmpty()) {
+                matchBookSidecars(dir, books)
+                pathToBooks.merge(seriesFolder, books) { prev, one -> prev.union(one).toMutableList() }
+              }
+              return FileVisitResult.CONTINUE
+            }
+
             val tempSeries = pathToSeries[dir]
             if (!books.isNullOrEmpty() && tempSeries !== null) {
               if (!oneshotsDir.isNullOrBlank() && dir.pathString.contains(oneshotsDir, true)) {
@@ -180,21 +229,7 @@ class FileSystemScanner(
                 pathToSeriesSidecars[dir]?.let { scannedSidecars.addAll(it) }
               }
 
-              // book sidecars are matched here, with the actual list of books
-              books.forEach { book ->
-                val sidecars =
-                  pathToBookSidecars[dir]
-                    ?.mapNotNull { sidecar ->
-                      sidecarBookConsumers.firstOrNull { it.isSidecarBookMatch(book.name, sidecar.name) }?.let {
-                        sidecar to it.getSidecarBookType()
-                      }
-                    }?.toMap() ?: emptyMap()
-                pathToBookSidecars[dir]?.minusAssign(sidecars.keys)
-
-                sidecars.mapTo(scannedSidecars) { (sidecar, type) ->
-                  Sidecar(sidecar.url, book.url, sidecar.lastModifiedTime, type, Sidecar.Source.BOOK)
-                }
-              }
+              matchBookSidecars(dir, books)
             }
 
             return FileVisitResult.CONTINUE

@@ -26,6 +26,10 @@ data class Library(
   val scanPdf: Boolean = true,
   val scanEpub: Boolean = true,
   val scanDirectoryExclusions: Set<String> = emptySet(),
+  /** When set, books in folders deeper than this depth below the root belong to the series of their ancestor folder at that depth. */
+  val scanSeriesDepth: Int? = null,
+  /** When a folder holds several books, keep only the most recently modified one. */
+  val scanOneBookPerFolder: Boolean = false,
   val repairExtensions: Boolean = false,
   val convertToCbz: Boolean = false,
   val emptyTrashAfterScan: Boolean = false,

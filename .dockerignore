@@ -1,0 +1,6 @@
+.git
+**/node_modules
+**/build
+**/dist
+.gradle
+komga/src/main/resources/public

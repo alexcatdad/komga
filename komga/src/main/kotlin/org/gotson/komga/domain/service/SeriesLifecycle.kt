@@ -32,13 +32,14 @@ import org.gotson.komga.language.stripAccents
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.support.TransactionTemplate
-import java.io.File
+import java.nio.file.Paths
 import java.time.LocalDateTime
 import kotlin.io.path.deleteIfExists
 import kotlin.io.path.exists
 import kotlin.io.path.isWritable
 import kotlin.io.path.listDirectoryEntries
 import kotlin.io.path.notExists
+import kotlin.io.path.readBytes
 import kotlin.io.path.toPath
 
 private val logger = KotlinLogging.logger {}
@@ -250,7 +251,7 @@ class SeriesLifecycle(
   private fun getBytesFromThumbnailSeries(thumbnail: ThumbnailSeries): ByteArray? =
     when {
       thumbnail.thumbnail != null -> thumbnail.thumbnail
-      thumbnail.url != null -> File(thumbnail.url.toURI()).readBytes()
+      thumbnail.url != null -> Paths.get(thumbnail.url.toURI()).readBytes()
       else -> null
     }
 

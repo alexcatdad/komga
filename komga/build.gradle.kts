@@ -103,6 +103,8 @@ dependencies {
   implementation("org.apache.commons:commons-compress:1.28.0")
   implementation("com.github.junrar:junrar:8.1.2")
   implementation("org.apache.pdfbox:pdfbox:3.0.8")
+  // java.nio provider for s3:// and s3x:// (S3-compatible) library roots
+  implementation("software.amazon.nio.s3:aws-java-nio-spi-for-s3:2.2.0")
   implementation("net.grey-panther:natural-comparator:1.1")
   implementation("org.jsoup:jsoup:1.23.2")
 

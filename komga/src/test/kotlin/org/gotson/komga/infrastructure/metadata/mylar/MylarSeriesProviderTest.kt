@@ -13,7 +13,7 @@ import org.gotson.komga.infrastructure.metadata.mylar.dto.Status
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
-import java.io.File
+import java.io.InputStream
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -54,7 +54,7 @@ class MylarSeriesProviderTest {
       )
     val root = Series(metadata)
 
-    every { mockMapper.readValue(any<File>(), Series::class.java) } returns root
+    every { mockMapper.readValue(any<InputStream>(), Series::class.java) } returns root
 
     val patch = mylarSeriesProvider.getSeriesMetadata(series)!!
 
@@ -95,7 +95,7 @@ class MylarSeriesProviderTest {
       )
     val root = Series(metadata)
 
-    every { mockMapper.readValue(any<File>(), Series::class.java) } returns root
+    every { mockMapper.readValue(any<InputStream>(), Series::class.java) } returns root
 
     val patch = mylarSeriesProvider.getSeriesMetadata(series)!!
 
@@ -136,7 +136,7 @@ class MylarSeriesProviderTest {
       )
     val root = Series(metadata)
 
-    every { mockMapper.readValue(any<File>(), Series::class.java) } returns root
+    every { mockMapper.readValue(any<InputStream>(), Series::class.java) } returns root
 
     val patch = mylarSeriesProvider.getSeriesMetadata(series)!!
 
@@ -168,7 +168,7 @@ class MylarSeriesProviderTest {
       )
     val root = Series(metadata)
 
-    every { mockMapper.readValue(any<File>(), Series::class.java) } returns root
+    every { mockMapper.readValue(any<InputStream>(), Series::class.java) } returns root
 
     val patch = mylarSeriesProvider.getSeriesMetadata(series)!!
 
@@ -200,7 +200,7 @@ class MylarSeriesProviderTest {
       )
     val root = Series(metadata)
 
-    every { mockMapper.readValue(any<File>(), Series::class.java) } returns root
+    every { mockMapper.readValue(any<InputStream>(), Series::class.java) } returns root
 
     val patch = mylarSeriesProvider.getSeriesMetadata(series)!!
 

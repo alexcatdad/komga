@@ -21,6 +21,7 @@ import org.gotson.komga.domain.persistence.HistoricalEventRepository
 import org.gotson.komga.domain.persistence.LibraryRepository
 import org.gotson.komga.domain.persistence.MediaRepository
 import org.gotson.komga.domain.persistence.PageHashRepository
+import org.gotson.komga.infrastructure.util.isOnDefaultFileSystem
 import org.gotson.komga.language.notEquals
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
@@ -59,6 +60,11 @@ class BookPageEditor(
     // perform various checks
     if (failedPageRemoval.contains(book.id)) {
       logger.info { "Book page removal already failed before, skipping" }
+      return null
+    }
+
+    if (!book.path.isOnDefaultFileSystem()) {
+      logger.info { "Book page removal is not supported for books on remote storage, skipping: ${book.path}" }
       return null
     }
 

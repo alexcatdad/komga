@@ -12,6 +12,8 @@ logging:
   level:
     org.apache.activemq.audit: WARN
     org.apache.fontbox.cff.Type1CharString: ERROR
+    # logs every missing-file probe (sidecars, series.json) on S3 before throwing; Komga handles the exception
+    software.amazon.nio.spi.s3.S3BasicFileAttributes: OFF
     org.springframework.security.config.annotation.authentication.configuration.InitializeUserDetailsBeanManagerConfigurer: ERROR
 
 komga:

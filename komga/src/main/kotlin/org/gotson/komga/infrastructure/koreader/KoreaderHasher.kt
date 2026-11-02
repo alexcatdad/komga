@@ -3,7 +3,8 @@ package org.gotson.komga.infrastructure.koreader
 import com.appmattus.crypto.Algorithm
 import io.github.oshai.kotlinlogging.KotlinLogging
 import org.springframework.stereotype.Component
-import java.io.RandomAccessFile
+import java.nio.ByteBuffer
+import java.nio.file.Files
 import java.nio.file.Path
 
 private val logger = KotlinLogging.logger {}
@@ -24,13 +25,15 @@ class KoreaderHasher {
     val size = 1024
     val digest = Algorithm.MD5.createDigest()
 
-    val file = RandomAccessFile(path.toFile(), "r")
-
-    val buffer = ByteArray(size)
-    (-1..10).forEach {
-      file.seek(step shl (2 * it))
-      val size = file.read(buffer)
-      if (size > 0) digest.update(buffer, 0, size)
+    // a channel rather than a RandomAccessFile, so paths on non-default filesystems (S3) work too
+    Files.newByteChannel(path).use { channel ->
+      val buffer = ByteBuffer.allocate(size)
+      (-1..10).forEach {
+        channel.position(step shl (2 * it))
+        buffer.clear()
+        val size = channel.read(buffer)
+        if (size > 0) digest.update(buffer.array(), 0, size)
+      }
     }
 
     return digest.digest().toHexString()

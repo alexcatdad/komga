@@ -12,6 +12,8 @@ import org.junit.jupiter.params.provider.Arguments
 import org.junit.jupiter.params.provider.MethodSource
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.attribute.FileTime
+import java.time.Instant
 import java.util.stream.Stream
 
 class FileSystemScannerTest {
@@ -393,6 +395,81 @@ class FileSystemScannerTest {
       scan.forEach { (_, books) ->
         assertThat(books).hasSize(1)
       }
+    }
+  }
+
+  @Test
+  fun `given series depth when scanning then books in deeper folders belong to the series folder at that depth`() {
+    Jimfs.newFileSystem(Configuration.unix()).use { fs ->
+      // given
+      val root = fs.getPath("/root")
+      Files.createDirectory(root)
+
+      makeSubDir(root, "loose", listOf("loose.cbz"))
+      val series1 = makeSubDir(root, "series1", listOf("direct.cbz"))
+      val episodes1 = makeSubDir(series1, "episodes", emptyList())
+      makeSubDir(episodes1, "e1", listOf("a.cbz"))
+      makeSubDir(episodes1, "e2", listOf("b.cbz"))
+      val series2 = makeSubDir(root, "series2", emptyList())
+      val episodes2 = makeSubDir(series2, "episodes", emptyList())
+      makeSubDir(episodes2, "e3", listOf("c.epub"))
+
+      // when
+      val scan = scanner.scanRootFolder(root, seriesDepth = 1).series
+
+      // then
+      assertThat(scan.keys.map { it.name }).containsExactlyInAnyOrder("loose", "series1", "series2")
+      assertThat(
+        scan.entries
+          .first { it.key.name == "series1" }
+          .value
+          .map { it.name },
+      ).containsExactlyInAnyOrder("direct", "a", "b")
+      assertThat(
+        scan.entries
+          .first { it.key.name == "series2" }
+          .value
+          .map { it.name },
+      ).containsExactly("c")
+    }
+  }
+
+  @Test
+  fun `given one book per folder when scanning then only the most recently modified book of each folder is returned`() {
+    Jimfs.newFileSystem(Configuration.unix()).use { fs ->
+      // given
+      val root = fs.getPath("/root")
+      Files.createDirectory(root)
+
+      val series = makeSubDir(root, "series", emptyList())
+      val e1 = makeSubDir(series, "e1", listOf("old.cbz", "new.cbz"))
+      Files.setLastModifiedTime(e1.resolve("old.cbz"), FileTime.from(Instant.parse("2026-01-01T00:00:00Z")))
+      Files.setLastModifiedTime(e1.resolve("new.cbz"), FileTime.from(Instant.parse("2026-02-01T00:00:00Z")))
+      makeSubDir(series, "e2", listOf("only.cbz"))
+
+      // when
+      val scan = scanner.scanRootFolder(root, seriesDepth = 1, oneBookPerFolder = true).series
+
+      // then
+      assertThat(scan).hasSize(1)
+      assertThat(scan.values.first().map { it.name }).containsExactlyInAnyOrder("new", "only")
+    }
+  }
+
+  @Test
+  fun `given exclusion matching file names when scanning then those files are not returned`() {
+    Jimfs.newFileSystem(Configuration.unix()).use { fs ->
+      // given
+      val root = fs.getPath("/root")
+      Files.createDirectory(root)
+
+      makeSubDir(root, "series", listOf("comic.cbz", "episode.media.zip", "other.zip"))
+
+      // when
+      val scan = scanner.scanRootFolder(root, directoryExclusions = setOf(".media.zip")).series
+
+      // then
+      assertThat(scan.values.flatMap { list -> list.map { it.name } }).containsExactlyInAnyOrder("comic", "other")
     }
   }
 

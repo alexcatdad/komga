@@ -10,11 +10,13 @@ import org.gotson.komga.domain.model.MediaType
 import org.gotson.komga.domain.persistence.BookProjectionRepository
 import org.gotson.komga.infrastructure.configuration.KomgaSettingsProvider
 import org.gotson.komga.infrastructure.configuration.SettingChangedEvent
+import org.gotson.komga.infrastructure.util.isOnDefaultFileSystem
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Component
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 import java.util.concurrent.TimeUnit
 import kotlin.io.path.Path
 import kotlin.io.path.deleteIfExists
@@ -135,44 +137,60 @@ class KepubConverter(
     val destinationPath = (destinationDir ?: tmpDir).resolve(book.path.nameWithoutExtension + ".kepub.epub")
     destinationPath.deleteIfExists()
 
-    val command =
-      arrayOf(
-        kepubifyPath.toString(),
-        book.path.toString(),
-        "-o",
-        destinationPath.toString(),
-      )
-    logger.debug { "Starting conversion with: ${command.joinToString(" ")}" }
-    val process =
-      try {
-        Runtime.getRuntime().exec(command)
-      } catch (e: Exception) {
-        logger.error(e) { "Failed to create process" }
+    // kepubify needs a local file: books on remote storage (S3) are copied to a temporary file first
+    val source =
+      if (book.path.isOnDefaultFileSystem())
+        book.path
+      else
+        try {
+          Files.createTempFile(tmpDir, "komga-kepub-", ".epub").also { Files.copy(book.path, it, StandardCopyOption.REPLACE_EXISTING) }
+        } catch (e: Exception) {
+          logger.error(e) { "Could not copy book to a local file for conversion: ${book.path}" }
+          return null
+        }
+
+    try {
+      val command =
+        arrayOf(
+          kepubifyPath.toString(),
+          source.toString(),
+          "-o",
+          destinationPath.toString(),
+        )
+      logger.debug { "Starting conversion with: ${command.joinToString(" ")}" }
+      val process =
+        try {
+          Runtime.getRuntime().exec(command)
+        } catch (e: Exception) {
+          logger.error(e) { "Failed to create process" }
+          return null
+        }
+
+      if (!process.waitFor(10, TimeUnit.SECONDS)) {
+        logger.error { "Kepub conversion timeout. Command: ${command.joinToString(" ")}" }
         return null
       }
 
-    if (!process.waitFor(10, TimeUnit.SECONDS)) {
-      logger.error { "Kepub conversion timeout. Command: ${command.joinToString(" ")}" }
-      return null
-    }
+      if (process.exitValue() != 0) {
+        val error = process.errorReader().useLines { it.joinToString(" ") }
+        logger.error { "Kepub conversion failed. Command: ${command.joinToString(" ")}. Error: $error" }
+        return null
+      }
+      logger.debug {
+        "kepubify output: " + process.inputReader().useLines { it.joinToString("\n") }
+      }
 
-    if (process.exitValue() != 0) {
-      val error = process.errorReader().useLines { it.joinToString(" ") }
-      logger.error { "Kepub conversion failed. Command: ${command.joinToString(" ")}. Error: $error" }
-      return null
-    }
-    logger.debug {
-      "kepubify output: " + process.inputReader().useLines { it.joinToString("\n") }
-    }
+      if (!destinationPath.exists()) {
+        logger.error { "Converted file not found: $destinationPath" }
+        return null
+      }
 
-    if (!destinationPath.exists()) {
-      logger.error { "Converted file not found: $destinationPath" }
-      return null
+      // store the kepub filesize, so we can pass it back during Kobo Sync
+      bookProjectionRepository.save(BookProjection(book.id, KEPUB_DEFAULT, destinationPath.fileSize()))
+
+      return destinationPath
+    } finally {
+      if (source != book.path) source.deleteIfExists()
     }
-
-    // store the kepub filesize, so we can pass it back during Kobo Sync
-    bookProjectionRepository.save(BookProjection(book.id, KEPUB_DEFAULT, destinationPath.fileSize()))
-
-    return destinationPath
   }
 }

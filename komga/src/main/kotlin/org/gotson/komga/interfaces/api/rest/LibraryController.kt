@@ -120,6 +120,8 @@ class LibraryController(
             hashKoreader = library.hashKoreader,
             analyzeDimensions = library.analyzeDimensions,
             oneshotsDirectory = library.oneshotsDirectory?.ifBlank { null },
+            scanSeriesDepth = library.scanSeriesDepth,
+            scanOneBookPerFolder = library.scanOneBookPerFolder,
           ),
         ).toDto(includeRoot = principal.user.isAdmin)
     } catch (e: Exception) {
@@ -192,6 +194,8 @@ class LibraryController(
             hashKoreader = hashKoreader ?: existing.hashKoreader,
             analyzeDimensions = analyzeDimensions ?: existing.analyzeDimensions,
             oneshotsDirectory = if (isSet("oneshotsDirectory")) oneshotsDirectory?.ifBlank { null } else existing.oneshotsDirectory,
+            scanSeriesDepth = if (isSet("scanSeriesDepth")) scanSeriesDepth else existing.scanSeriesDepth,
+            scanOneBookPerFolder = scanOneBookPerFolder ?: existing.scanOneBookPerFolder,
           )
         }
       try {

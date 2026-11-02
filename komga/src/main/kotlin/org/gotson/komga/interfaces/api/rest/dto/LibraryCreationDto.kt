@@ -1,6 +1,7 @@
 package org.gotson.komga.interfaces.api.rest.dto
 
 import jakarta.validation.constraints.NotBlank
+import jakarta.validation.constraints.Positive
 
 data class LibraryCreationDto(
   @get:NotBlank val name: String,
@@ -31,4 +32,7 @@ data class LibraryCreationDto(
   val hashKoreader: Boolean = false,
   val analyzeDimensions: Boolean = true,
   val oneshotsDirectory: String? = null,
+  @get:Positive
+  val scanSeriesDepth: Int? = null,
+  val scanOneBookPerFolder: Boolean = false,
 )

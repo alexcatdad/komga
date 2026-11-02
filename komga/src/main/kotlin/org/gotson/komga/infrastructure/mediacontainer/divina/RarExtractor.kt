@@ -9,8 +9,10 @@ import org.gotson.komga.domain.model.MediaType
 import org.gotson.komga.domain.model.MediaUnsupportedException
 import org.gotson.komga.infrastructure.image.ImageAnalyzer
 import org.gotson.komga.infrastructure.mediacontainer.ContentDetector
+import org.gotson.komga.infrastructure.util.isOnDefaultFileSystem
 import org.springframework.stereotype.Service
 import java.nio.file.Path
+import kotlin.io.path.inputStream
 
 private val logger = KotlinLogging.logger {}
 
@@ -28,7 +30,7 @@ class RarExtractor(
     analyzeDimensions: Boolean,
   ): List<MediaContainerEntry> =
     try {
-      Archive(path.toFile()).use { rar ->
+      openArchive(path).use { rar ->
         if (rar.isPasswordProtected) throw MediaUnsupportedException("Encrypted RAR archives are not supported", "ERR_1002")
         if (rar.mainHeader?.isMultiVolume == true) throw MediaUnsupportedException("Multi-Volume RAR archives are not supported", "ERR_1004")
         rar.fileHeaders
@@ -58,8 +60,11 @@ class RarExtractor(
     path: Path,
     entryName: String,
   ): ByteArray =
-    Archive(path.toFile()).use { rar ->
+    openArchive(path).use { rar ->
       val header = rar.fileHeaders.find { it.fileName == entryName }
       rar.getInputStream(header).use { it.readBytes() }
     }
+
+  // remote (S3) files cannot be opened as a java.io.File: junrar then reads them as a stream
+  private fun openArchive(path: Path): Archive = if (path.isOnDefaultFileSystem()) Archive(path.toFile()) else Archive(path.inputStream())
 }
