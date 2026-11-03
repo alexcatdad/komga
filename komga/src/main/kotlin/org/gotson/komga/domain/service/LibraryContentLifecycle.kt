@@ -214,14 +214,19 @@ class LibraryContentLifecycle(
             seriesLifecycle.addBooks(existingSeries, booksToAdd)
             tryRestoreBooks(booksToAdd)
             seriesToSortAndRefresh.add(existingSeries)
+          } else if (existingSeries.bookCount != newBooks.size) {
+            // an interrupted scan can leave a series unsorted, with a stale book count
+            logger.info { "Series book count is stale, sorting again: $existingSeries" }
+            seriesToSortAndRefresh.add(existingSeries)
           }
         }
       }
 
-      // for all series where books have been removed or added, trigger a sort and refresh metadata
+      // for all series where books have been removed or added, trigger a sort and refresh metadata and artwork
       seriesToSortAndRefresh.distinctBy { it.id }.forEach {
         seriesLifecycle.sortBooks(it)
         taskEmitter.refreshSeriesMetadata(it.id)
+        taskEmitter.refreshSeriesLocalArtwork(it.id)
       }
 
       val existingSidecars = sidecarRepository.findAll()

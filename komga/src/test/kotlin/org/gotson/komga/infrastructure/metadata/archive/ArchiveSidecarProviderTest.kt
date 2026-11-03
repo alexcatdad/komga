@@ -1,12 +1,15 @@
 package org.gotson.komga.infrastructure.metadata.archive
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import io.mockk.every
+import io.mockk.mockk
 import org.assertj.core.api.Assertions.assertThat
 import org.gotson.komga.domain.model.BookWithMedia
 import org.gotson.komga.domain.model.Media
 import org.gotson.komga.domain.model.SeriesMetadata
 import org.gotson.komga.domain.model.makeBook
 import org.gotson.komga.domain.model.makeSeries
+import org.gotson.komga.domain.persistence.BookRepository
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.net.URI
@@ -14,11 +17,14 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.attribute.FileTime
 import java.time.Instant
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import kotlin.io.path.createDirectories
 import kotlin.io.path.writeText
 
 class ArchiveSidecarProviderTest {
-  private val provider = ArchiveSidecarProvider(ObjectMapper())
+  private val bookRepository = mockk<BookRepository> { every { findAllBySeriesId(any()) } returns emptyList() }
+  private val provider = ArchiveSidecarProvider(ObjectMapper(), bookRepository)
 
   @TempDir
   lateinit var root: Path
@@ -90,7 +96,7 @@ class ArchiveSidecarProviderTest {
   fun `given series document in metadata folder when getting series metadata then title and summary are returned`() {
     // given
     val seriesFolder = root.resolve("series/3")
-    write(seriesFolder.resolve("metadata/aaa.json"), """{"id":"3","title":"My Series","url":"https://tapas.io/series/3","description":"About it","source":"Tapas"}""")
+    write(seriesFolder.resolve("metadata/aaa.json"), """{"id":"3","title":"My Series","url":"https://tapas.io/series/3","description":"About it","source":"Tapas","poster":"tapas/blobs/ab/poster.jpg"}""")
 
     // when
     val patch = provider.getSeriesMetadata(makeSeries("3", url = seriesFolder.toUri().toURL()))
@@ -102,6 +108,7 @@ class ArchiveSidecarProviderTest {
     assertThat(patch.summary).isEqualTo("About it")
     assertThat(patch.publisher).isEqualTo("Tapas")
     assertThat(patch.readingDirection).isEqualTo(SeriesMetadata.ReadingDirection.WEBTOON)
+    assertThat(provider.getSeriesSource(makeSeries("3", url = seriesFolder.toUri().toURL()))!!.poster).isEqualTo("tapas/blobs/ab/poster.jpg")
   }
 
   @Test
@@ -114,5 +121,36 @@ class ArchiveSidecarProviderTest {
 
     // then
     assertThat(patch).isNull()
+  }
+
+  @Test
+  fun `given no series document when getting series metadata then title and source come from the newest episode epub`() {
+    // given
+    val seriesFolder = root.resolve("series/5")
+    val episode = seriesFolder.resolve("episodes/50")
+    val epub = episode.resolve("aaa.epub")
+    epub.parent.createDirectories()
+    ZipOutputStream(Files.newOutputStream(epub)).use { zip ->
+      zip.putNextEntry(ZipEntry("META-INF/container.xml"))
+      zip.write(
+        """<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>""".toByteArray(),
+      )
+      zip.putNextEntry(ZipEntry("OEBPS/content.opf"))
+      zip.write(
+        """<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Blue Phoenix</dc:title><dc:source>https://tapas.io/series/5</dc:source></metadata></package>""".toByteArray(),
+      )
+    }
+    write(episode.resolve("bbb.json"), """{"source":"Tapas","id":"50","seriesId":"5","title":"Chapter One","position":1}""")
+    val series = makeSeries("5", url = seriesFolder.toUri().toURL())
+    every { bookRepository.findAllBySeriesId(series.id) } returns listOf(makeBook("aaa", url = epub.toUri().toURL()))
+
+    // when
+    val patch = provider.getSeriesMetadata(series)
+    val source = provider.getSeriesSource(series)
+
+    // then
+    assertThat(patch!!.title).isEqualTo("Blue Phoenix")
+    assertThat(patch.publisher).isEqualTo("Tapas")
+    assertThat(source!!.url).isEqualTo("https://tapas.io/series/5")
   }
 }

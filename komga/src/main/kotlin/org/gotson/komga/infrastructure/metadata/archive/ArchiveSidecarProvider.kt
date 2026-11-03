@@ -12,8 +12,12 @@ import org.gotson.komga.domain.model.Series
 import org.gotson.komga.domain.model.SeriesMetadata
 import org.gotson.komga.domain.model.SeriesMetadataPatch
 import org.gotson.komga.domain.model.WebLink
+import org.gotson.komga.domain.persistence.BookRepository
+import org.gotson.komga.infrastructure.mediacontainer.epub.getPackageFileContent
 import org.gotson.komga.infrastructure.metadata.BookMetadataProvider
 import org.gotson.komga.infrastructure.metadata.SeriesMetadataProvider
+import org.jsoup.Jsoup
+import org.jsoup.parser.Parser
 import org.springframework.stereotype.Service
 import java.net.URI
 import java.nio.file.Files
@@ -30,8 +34,9 @@ private val logger = KotlinLogging.logger {}
 /**
  * Reads the JSON metadata that a content-addressed web-comic archive writes next to its files:
  * - book: an episode document (`id`, `title`, `position`, optional `url`, `source`) in the book's folder
- * - series: a series document (`title`, optional `description`, `url`, `source`) in the series' `metadata/` folder;
- *   the series is read as a webtoon (vertical scroll)
+ * - series: a series document (`title`, optional `description`, `url`, `source`, `poster`) in the series' `metadata/` folder;
+ *   the series is read as a webtoon (vertical scroll). Without one, the title and source page come from the newest
+ *   episode EPUB (`dc:title` holds the series name, `dc:source` the series page)
  *
  * Files are hash-named, so documents are recognised by their fields, and the newest one wins when there are several.
  * Other JSON in the same folders (such as a novel's captured original, which has a `kind`) is ignored.
@@ -39,6 +44,7 @@ private val logger = KotlinLogging.logger {}
 @Service
 class ArchiveSidecarProvider(
   private val mapper: ObjectMapper,
+  private val bookRepository: BookRepository,
 ) : BookMetadataProvider,
   SeriesMetadataProvider {
   override val capabilities =
@@ -62,23 +68,66 @@ class ArchiveSidecarProvider(
   }
 
   override fun getSeriesMetadata(series: Series): SeriesMetadataPatch? {
-    if (series.oneshot) return null
-    val document = newestDocument(series.path.resolve(METADATA_FOLDER)) { it.isSeries() } ?: return null
-    val title = document["title"].asText()
+    val source = getSeriesSource(series) ?: return null
     return SeriesMetadataPatch(
-      title = title,
-      titleSort = title,
+      title = source.title,
+      titleSort = source.title,
       status = null,
-      summary = document["description"]?.takeIf { it.isTextual }?.asText(),
+      summary = source.summary,
       // web comics are vertical strips; novels are opened by the EPUB reader, which ignores this
       readingDirection = SeriesMetadata.ReadingDirection.WEBTOON,
-      publisher = document["source"]?.takeIf { it.isTextual }?.asText(),
+      publisher = source.publisher,
       ageRating = null,
       language = null,
       genres = null,
       totalBookCount = null,
       collections = emptySet(),
     )
+  }
+
+  /**
+   * The series' title, summary, publisher, source page and poster, from its series document or else its newest episode EPUB.
+   */
+  fun getSeriesSource(series: Series): SeriesSource? {
+    if (series.oneshot) return null
+    newestDocument(series.path.resolve(METADATA_FOLDER)) { it.isSeries() }?.let { document ->
+      return SeriesSource(
+        title = document["title"].asText(),
+        summary = document.text("description"),
+        publisher = document.text("source"),
+        url = document.text("url"),
+        poster = document.text("poster"),
+      )
+    }
+    val book =
+      bookRepository
+        .findAllBySeriesId(series.id)
+        .filter { it.deletedDate == null && it.path.extension.equals("epub", ignoreCase = true) }
+        .maxByOrNull { it.fileLastModified } ?: return null
+    return try {
+      val opf = getPackageFileContent(book.path)?.let { Jsoup.parse(it, "", Parser.xmlParser()) } ?: return null
+      val title =
+        opf
+          .getElementsByTag("dc:title")
+          .firstOrNull()
+          ?.text()
+          ?.ifBlank { null } ?: return null
+      SeriesSource(
+        title = title,
+        summary = null,
+        publisher = newestDocument(book.path.parent) { it.isEpisode() }?.text("source"),
+        url =
+          opf
+            .getElementsByTag("dc:source")
+            .firstOrNull()
+            ?.text()
+            ?.ifBlank { null },
+        poster = null,
+      )
+    } catch (e: Exception) {
+      logger.warn(e) { "Could not read the package document of ${book.path}" }
+      null
+    }
   }
 
   override fun shouldLibraryHandlePatch(
@@ -123,6 +172,8 @@ class ArchiveSidecarProvider(
 
   private fun JsonNode.isSeries() = isObject && !has("kind") && this["title"]?.isTextual == true && !has("position")
 
+  private fun JsonNode.text(field: String) = this[field]?.takeIf { it.isTextual }?.asText()
+
   private fun link(document: JsonNode): WebLink? {
     val url = document["url"]?.takeIf { it.isTextual }?.asText() ?: return null
     return try {
@@ -131,6 +182,14 @@ class ArchiveSidecarProvider(
       null
     }
   }
+
+  data class SeriesSource(
+    val title: String,
+    val summary: String?,
+    val publisher: String?,
+    val url: String?,
+    val poster: String?,
+  )
 
   companion object {
     const val METADATA_FOLDER = "metadata"

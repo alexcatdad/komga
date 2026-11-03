@@ -55,6 +55,7 @@ import org.springframework.data.domain.Pageable
 import java.net.URL
 import java.nio.file.Path
 import java.nio.file.Paths
+import java.time.LocalDateTime
 import kotlin.io.path.nameWithoutExtension
 
 @SpringBootTest
@@ -105,6 +106,7 @@ class LibraryContentLifecycleTest(
   fun beforeEach() {
     every { mockTaskEmitter.refreshBookMetadata(any<Book>(), any()) } just Runs
     every { mockTaskEmitter.refreshSeriesMetadata(any<String>(), any()) } just Runs
+    every { mockTaskEmitter.refreshSeriesLocalArtwork(any<String>(), any()) } just Runs
   }
 
   @AfterAll
@@ -147,6 +149,28 @@ class LibraryContentLifecycleTest(
       assertThat(allSeries).hasSize(1)
       assertThat(allBooks).hasSize(2)
       assertThat(allBooks.map { it.name }).containsExactly("book1", "book2")
+    }
+
+    @Test
+    fun `given unchanged series with a stale book count when scanning then books are sorted again`() {
+      // given
+      val library = makeLibrary()
+      libraryRepository.insert(library)
+      val modified = LocalDateTime.of(2026, 1, 1, 0, 0)
+
+      every { mockScanner.scanRootFolder(any()) } answers {
+        mapOf(
+          makeSeries(name = "series").copy(fileLastModified = modified) to listOf(makeBook("book1", fileLastModified = modified), makeBook("book2", fileLastModified = modified)),
+        ).toScanResult()
+      }
+      libraryContentLifecycle.scanRootFolder(library)
+      seriesRepository.findAll().single().let { seriesRepository.update(it.copy(bookCount = 0), false) }
+
+      // when
+      libraryContentLifecycle.scanRootFolder(library)
+
+      // then
+      assertThat(seriesRepository.findAll().single().bookCount).isEqualTo(2)
     }
 
     @Test

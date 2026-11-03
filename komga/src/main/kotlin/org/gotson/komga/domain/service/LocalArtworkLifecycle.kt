@@ -5,6 +5,7 @@ import org.gotson.komga.domain.model.Book
 import org.gotson.komga.domain.model.MarkSelectedPreference
 import org.gotson.komga.domain.model.Series
 import org.gotson.komga.domain.persistence.LibraryRepository
+import org.gotson.komga.infrastructure.metadata.archive.ArchiveCoverProvider
 import org.gotson.komga.infrastructure.metadata.localartwork.LocalArtworkProvider
 import org.springframework.stereotype.Service
 
@@ -16,6 +17,7 @@ class LocalArtworkLifecycle(
   private val bookLifecycle: BookLifecycle,
   private val seriesLifecycle: SeriesLifecycle,
   private val localArtworkProvider: LocalArtworkProvider,
+  private val archiveCoverProvider: ArchiveCoverProvider,
 ) {
   fun refreshLocalArtwork(book: Book) {
     logger.info { "Refresh local artwork for book: $book" }
@@ -33,11 +35,15 @@ class LocalArtworkLifecycle(
     logger.info { "Refresh local artwork for series: $series" }
     val library = libraryRepository.findById(series.libraryId)
 
-    if (library.importLocalArtwork)
+    if (library.importLocalArtwork) {
       localArtworkProvider.getSeriesThumbnails(series).forEach {
         seriesLifecycle.addThumbnailForSeries(it, if (it.selected) MarkSelectedPreference.IF_NONE_OR_GENERATED else MarkSelectedPreference.NO)
       }
-    else
+      archiveCoverProvider.getSeriesCover(series)?.let {
+        seriesLifecycle.addThumbnailForSeries(it, MarkSelectedPreference.IF_NONE_OR_GENERATED)
+      }
+    } else {
       logger.info { "Library is not set to import local artwork, skipping" }
+    }
   }
 }

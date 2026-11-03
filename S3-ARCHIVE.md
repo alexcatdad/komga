@@ -52,6 +52,13 @@ by their fields since the files are hash-named:
   the title, number, sort number and a link;
 - series: the newest document in the series' `metadata/` folder (`title`, `description`, `source`)
   gives the title, summary and publisher, and sets the reading direction to webtoon (vertical scroll).
+  Without one, the newest episode EPUB gives the title (`dc:title` holds the series name);
+- poster: the series document's `poster`, an image key from the root of the bucket, becomes the
+  series poster (read in place, like local artwork) when **import local artwork** is on. It is picked
+  up whenever the series' books change, or by refreshing the library's metadata.
+
+A scan also sorts again any series whose book count does not match its books, which an interrupted
+scan can leave behind.
 
 Turn off **import EPUB book metadata** for archive libraries: the archive's EPUBs carry only the
 series name as their title, and that provider would otherwise overwrite the episode title.
