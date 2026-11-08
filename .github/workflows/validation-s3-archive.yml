@@ -1,0 +1,40 @@
+# Validation through the shared contract (alexcatdad/ci-actions, pinned).
+# Reports only for now (Homelab Delivery Plan step 2.4): nothing is required
+# and nothing deploys from here yet.
+# Runs for the s3-archive branch (the deployed one) only; upstream's own
+# workflows are unchanged. CodeQL has no Java/Kotlin in the contract.
+name: Validation
+on:
+  pull_request:
+    branches: [s3-archive]
+  push:
+    branches: [s3-archive]
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  pr:
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+    uses: alexcatdad/ci-actions/.github/workflows/validate-pr.yml@636d27d47fd61be41a0d83cb363bafe4cd7e69f7
+    with:
+      nix: true
+      build-command: nix build .#default
+  main:
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+    uses: alexcatdad/ci-actions/.github/workflows/validate-main.yml@636d27d47fd61be41a0d83cb363bafe4cd7e69f7
+    with:
+      nix: true
+      security-command: nix build .#default -o result && { nix run --inputs-from . nixpkgs#vulnix -- result || test $? -eq 2; }
+  codeql:
+    permissions:
+      contents: read
+      security-events: write
+    uses: alexcatdad/ci-actions/.github/workflows/codeql.yml@636d27d47fd61be41a0d83cb363bafe4cd7e69f7
+    with:
+      languages: '["actions", "javascript-typescript"]'
